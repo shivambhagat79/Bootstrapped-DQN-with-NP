@@ -103,7 +103,7 @@ class ReplayMemory:
         self.current = (self.current + 1) % self.size
 
     def _get_state(self, index):
-        if self.count is 0:
+        if self.count == 0:
             raise ValueError("The replay memory is empty!")
         if index < self.agent_history_length - 1:
             raise ValueError("Index must be min 3")

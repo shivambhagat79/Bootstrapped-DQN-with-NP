@@ -1,14 +1,9 @@
 import os
 from collections import deque
 import numpy as np
-from atari_py.ale_python_interface import ALEInterface
+import ale_py
+from ale_py import ALEInterface
 import cv2
-
-#from skimage.transform import resize
-#from skimage.color import rgb2gray
-#from imageio import imwrite
-#def preprocess_frame(observ, output_size):
-#    return resize(rgb2gray(observ),(output_size, output_size)).astype(np.float32, copy=False)
 
 # opencv is ~3x faster than skimage
 def cv_preprocess_frame(observ, output_size):
@@ -48,13 +43,16 @@ class Environment(object):
 
     @staticmethod
     def _init_ale(rand_seed, rom_file):
-        assert os.path.exists(rom_file), '%s does not exists.'
+        assert os.path.exists(rom_file), f'{rom_file} does not exist.'
         ale = ALEInterface()
-        ale.setInt('random_seed', rand_seed)
-        ale.setBool('showinfo', False)
-        ale.setInt('frame_skip', 1)
-        ale.setFloat('repeat_action_probability', 0.0)
-        ale.setBool('color_averaging', False)
+
+        # Set settings compatible with ale_py 0.10.2
+        ale.setInt("random_seed", rand_seed)
+        ale.setInt("frame_skip", 1)
+        ale.setFloat("repeat_action_probability", 0.0)
+        ale.setBool("color_averaging", False)
+
+        # Load the ROM file
         ale.loadROM(rom_file)
         return ale
 
@@ -63,12 +61,18 @@ class Environment(object):
         return len(self.actions)
 
     def _get_current_frame(self):
-        # global glb_counter
+        # Get current screen
         screen = self.ale.getScreenRGB()
+
+        # Ensure consistent dimensions by checking and reshaping if necessary
+        if self.prev_screen.shape != screen.shape:
+            # Reshape prev_screen to match current screen dimensions
+            self.prev_screen = np.zeros(screen.shape, dtype=np.uint8)
+
         max_screen = np.maximum(self.prev_screen, screen)
         frame = cv_preprocess_frame(max_screen, self.frame_size)
         return frame
-        
+
     def close(self):
         del(self.ale)
 
@@ -165,5 +169,3 @@ if __name__ == '__main__':
     print('total steps:', i)
     print('mean time', np.mean(times))
     print('max time', np.max(times))
-    # with cv - 1000 steps ('mean time', 0.0008075275421142578) max   0.0008950233459472656
-    # with skimage -       ('mean time', 0.0022023658752441406) max,  0.003056049346923828
