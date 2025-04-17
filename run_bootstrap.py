@@ -167,7 +167,7 @@ class ActionGetter:
                         heads_chosen[i] += 1
                 return heads_chosen, action
 
-def ptlearn(states, actions, rewards, next_states, terminal_flags, active_heads, masks):
+def ptlearn(states, actions, rewards, next_states, terminal_flags, active_heads, masks,step_number):
     states = torch.Tensor(states.astype(np.float32)/info['NORM_BY']).to(info['DEVICE'])
     next_states = torch.Tensor(next_states.astype(np.float32)/info['NORM_BY']).to(info['DEVICE'])
     rewards = torch.Tensor(rewards).to(info['DEVICE'])
@@ -187,7 +187,9 @@ def ptlearn(states, actions, rewards, next_states, terminal_flags, active_heads,
 
     q_record = torch.stack(next_q_target_vals).detach().max()
     if 'PRIOR' in info['IMPROVEMENT']:
-        info['PRIOR_SCALE'] = 1+torch.stack(next_q_target_vals).detach().max()/20
+        max_q = torch.stack(next_q_target_vals).detach().max()
+        beta   = info['BETA_0'] * math.exp(-step_number / info['TAU'])
+        info['PRIOR_SCALE'] = 1 + beta * max_q
         prior_next_pi = torch.empty(info['N_ENSEMBLE'], info['BATCH_SIZE'], q_policy_vals[0].size(-1)).to(info['DEVICE'])
         # sample priors
         nn.init.normal_(prior_next_pi, 0, 0.02)
@@ -286,7 +288,7 @@ def train(step_number, last_save):
 
                 if step_number % info['LEARN_EVERY_STEPS'] == 0 and step_number > info['MIN_HISTORY_TO_LEARN']:
                     _states, _actions, _rewards, _next_states, _terminal_flags, _active_heads, _masks = replay_memory.get_minibatch(info['BATCH_SIZE'])
-                    q_record, ptloss = ptlearn(_states, _actions, _rewards, _next_states, _terminal_flags, _active_heads, _masks)
+                    q_record, ptloss = ptlearn(_states, _actions, _rewards, _next_states, _terminal_flags, _active_heads, _masks, step_number)
                     ptloss_list.append(ptloss)
                     q_list.append(q_record)
 
@@ -432,8 +434,10 @@ if __name__ == '__main__':
         "MAX_NO_OP_FRAMES":30, # REDUCED from 30 to 10 for faster episode start
         "DEAD_AS_END":True, # do you send finished=true to agent while training when it loses a life
         "IMPROVEMENT": ['PRIOR', ''],
+        "BETA_0": 0.08,          # initial β  (tune to taste)
+        "TAU":    10_000_000,    # decay time‑constant in frames
     }
-
+    
     info['FAKE_ACTS'] = [info['RANDOM_HEAD'] for x in range(info['N_ENSEMBLE'])]
     info['args'] = args
     info['load_time'] = datetime.date.today().ctime()
