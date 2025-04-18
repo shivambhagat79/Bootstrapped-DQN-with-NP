@@ -1,21 +1,23 @@
+"""
+Replay memory buffer for storing and sampling transitions in Bootstrapped DQN.
+Implements circular buffer of frames, actions, rewards, terminal flags, and per-head masks.
+Supports saving/loading buffer state and sampling minibatches.
+"""
 import numpy as np
 import time
 
-# This function was mostly pulled from
-# https://github.com/fg91/Deep-Q-Learning/blob/master/DQN.ipynb
 class ReplayMemory:
-    """Replay Memory that stores the last size=1,000,000 transitions"""
+    """Fixed-size circular replay buffer with per-ensemble-head masking"""
     def __init__(self, size=1000000, frame_height=84, frame_width=84,
                  agent_history_length=4, batch_size=32, num_heads=1, bernoulli_probability=1.0):
         """
         Args:
-            size: Integer, Number of stored transitions
-            frame_height: Integer, Height of a frame of an Atari game
-            frame_width: Integer, Width of a frame of an Atari game
-            agent_history_length: Integer, Number of frames stacked together to create a state
-            batch_size: Integer, Number if transitions returned in a minibatch
-            num_heads: integer number of heads needed in mask
-            bernoulli_probability: bernoulli probability that an experience will go to a particular head
+            size: max number of stored transitions
+            frame_height, frame_width: dimensions of each frame
+            agent_history_length: number of stacked frames per state
+            batch_size: number of samples per minibatch
+            num_heads: number of ensemble heads (for bootstrapping)
+            bernoulli_probability: probability an experience is assigned to a head
         """
         self.bernoulli_probability = bernoulli_probability
         assert(self.bernoulli_probability > 0)
@@ -26,7 +28,7 @@ class ReplayMemory:
         self.count = 0
         self.current = 0
         self.num_heads = num_heads
-        # Pre-allocate memory
+        # Pre-allocate arrays for frames, actions, rewards, masks, and terminal flags
         self.actions = np.empty(self.size, dtype=np.int32)
         self.rewards = np.empty(self.size, dtype=np.float32)
         self.active_heads = np.empty(self.size, dtype=np.float32)
@@ -35,7 +37,7 @@ class ReplayMemory:
         self.terminal_flags = np.empty(self.size, dtype=np.bool)
         self.masks = np.empty((self.size, self.num_heads), dtype=np.bool)
 
-        # Pre-allocate memory for the states and new_states in a minibatch
+        # Pre-allocate arrays for sampled states and next_states
         self.states = np.empty((batch_size, self.agent_history_length,
                                 self.frame_height, self.frame_width), dtype=np.uint8)
         self.new_states = np.empty((batch_size, self.agent_history_length,
@@ -46,6 +48,9 @@ class ReplayMemory:
             assert(self.bernoulli_probability == 1.0)
 
     def save_buffer(self, filepath):
+        """
+        Save current replay buffer arrays and metadata to a .npz file.
+        """
         st = time.time()
         print("starting save of buffer to %s"%filepath, st)
         np.savez(filepath,
@@ -59,6 +64,9 @@ class ReplayMemory:
         print("finished saving buffer", time.time()-st)
 
     def load_buffer(self, filepath):
+        """
+        Load replay buffer state from a .npz file into memory arrays.
+        """
         st = time.time()
         print("starting load of buffer from %s"%filepath, st)
         npfile = np.load(filepath)
@@ -82,12 +90,13 @@ class ReplayMemory:
 
     def add_experience(self, action, frame, reward, terminal, active_head):
         """
+        Add a single transition to the buffer with random masking for ensemble heads.
         Args:
-            action: An integer between 0 and env.action_space.n - 1
-                determining the action the agent perfomed
-            frame: A (84, 84, 1) frame of an Atari game in grayscale
-            reward: A float determining the reward the agend received for performing an action
-            terminal: A bool stating whether the episode terminated
+            action (int): index of the action taken
+            frame (np.ndarray): processed frame of shape (H, W)
+            reward (float): reward received
+            terminal (bool): whether episode ended
+            active_head: head index used for this transition
         """
         if frame.shape != (self.frame_height, self.frame_width):
             raise ValueError('Dimension of frame is wrong!')
@@ -103,6 +112,9 @@ class ReplayMemory:
         self.current = (self.current + 1) % self.size
 
     def _get_state(self, index):
+        """
+        Retrieve a stacked state (history_length frames) ending at given index.
+        """
         if self.count == 0:
             raise ValueError("The replay memory is empty!")
         if index < self.agent_history_length - 1:
@@ -110,6 +122,10 @@ class ReplayMemory:
         return self.frames[index-self.agent_history_length+1:index+1, ...]
 
     def _get_valid_indices(self, batch_size):
+        """
+        Sample batch_size random indices that are valid for constructing states.
+        Ensures episodes do not cross terminal boundaries.
+        """
         if batch_size != self.indices.shape[0]:
              self.indices = np.empty(batch_size, dtype=np.int32)
 
@@ -129,7 +145,11 @@ class ReplayMemory:
 
     def get_minibatch(self, batch_size):
         """
-        Returns a minibatch of batch_size
+        Return a minibatch of transitions (states, actions, rewards, next_states, terminals, heads, masks).
+        Args:
+            batch_size (int): number of samples
+        Returns:
+            tuple of numpy arrays: (states, actions, rewards, next_states, terminal_flags, active_heads, masks)
         """
         if batch_size != self.states.shape[0]:
             self.states = np.empty((batch_size, self.agent_history_length,

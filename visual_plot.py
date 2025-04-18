@@ -1,3 +1,7 @@
+"""
+Visualization utilities to generate performance plots and Q-value graphs.
+Provides functions to plot line graphs and error bands for evaluation metrics.
+"""
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -8,6 +12,7 @@ from run_bootstrap import rolling_average
 import string
 
 def plots(xs, ys, xlabel, ylabel, title, legends, loc="lower right", color=['b','y','g', 'r']):
+    """Plot simple line graphs for multiple series and save to 'figs' directory"""
     if not os.path.exists('figs'):
         os.makedirs('figs')
     for i,x in enumerate(xs):
@@ -20,7 +25,7 @@ def plots(xs, ys, xlabel, ylabel, title, legends, loc="lower right", color=['b',
     plt.close()
 
 def plots_err(xs, ys, ystd, xlabel, ylabel, title, legends, loc="lower right", color=['b','y','g', 'r']):
-
+    """Plot line graphs with shaded error regions (e.g., mean ± 2*stddev)"""
     if not os.path.exists('figs'):
         os.makedirs('figs')
     for i,x in enumerate(xs):
@@ -36,6 +41,7 @@ def plots_err(xs, ys, ystd, xlabel, ylabel, title, legends, loc="lower right", c
     plt.close()
 
 if __name__ == '__main__':
+    # Example usage: load two trained models and generate comparison plots
     game_name = 'tennis'
     titile_name = string.capwords(game_name.replace("_", " "))
     path1 = '../bootstrap_results/model_savedir/' + game_name + '00/'+game_name+'_bestq.pkl'

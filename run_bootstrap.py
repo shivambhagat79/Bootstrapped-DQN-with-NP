@@ -1,3 +1,7 @@
+"""
+Main training script for Bootstrapped Deep Q-Network (DQN) with optional randomized priors.
+Handles argument parsing, environment setup, model initialization, training loop, evaluation, plotting, and checkpointing.
+"""
 from __future__ import print_function
 import matplotlib
 matplotlib.use('Agg')
@@ -21,6 +25,7 @@ from replay import ReplayMemory
 import config
 
 def rolling_average(a, n=5) :
+    """Compute moving average over array `a` with window size `n`"""
     if n == 0:
         return a
     ret = np.cumsum(a, dtype=float)
@@ -28,6 +33,7 @@ def rolling_average(a, n=5) :
     return ret[n - 1:] / n
 
 def plot_dict_losses(plot_dict, name='loss_example.png', rolling_length=4, plot_title=''):
+    """Plot and save multiple series from a dict of {'label':{'index':..., 'val':...}}"""
     f,ax=plt.subplots(1,1,figsize=(6,6))
     for n in plot_dict.keys():
         print('plotting', n)
@@ -40,6 +46,7 @@ def plot_dict_losses(plot_dict, name='loss_example.png', rolling_length=4, plot_
     plt.close()
 
 def matplotlib_plot_all(p):
+    """Generate and save summary plots for training and evaluation metrics stored in perf dict"""
     epoch_num = len(p['steps'])
     epochs = np.arange(epoch_num)
     steps = p['steps']
@@ -67,6 +74,7 @@ def matplotlib_plot_all(p):
     plot_dict_losses({'highest eval score':{'index':np.array(p['eval_steps'])[eval_steps_mask], 'val':np.array(p['highest_eval_score'])[eval_score_mask]}}, name=os.path.join(model_base_filedir, 'highest_eval_score.png'), rolling_length=0)
 
 def handle_checkpoint(last_save, cnt):
+    """Save model checkpoint every CHECKPOINT_EVERY_STEPS and update last_save timestamp"""
     if (cnt-last_save) >= info['CHECKPOINT_EVERY_STEPS']:
         st = time.time()
         print("beginning checkpoint", st)
@@ -89,25 +97,19 @@ def handle_checkpoint(last_save, cnt):
 
 
 class ActionGetter:
-    """Determines an action according to an epsilon greedy strategy with annealing epsilon"""
-    """This class is from fg91's dqn. TODO put my function back in"""
+    """Epsilon-greedy action selector with linear annealing and voting across ensemble heads"""
     def __init__(self, n_actions, eps_initial=1, eps_final=0.1, eps_final_frame=0.01,
                  eps_evaluation=0.0, eps_annealing_frames=100000,
                  replay_memory_start_size=50000, max_steps=25000000, random_seed=122):
         """
+        Initialize epsilon schedule and random state for action selection.
         Args:
-            n_actions: Integer, number of possible actions
-            eps_initial: Float, Exploration probability for the first
-                replay_memory_start_size frames
-            eps_final: Float, Exploration probability after
-                replay_memory_start_size + eps_annealing_frames frames
-            eps_final_frame: Float, Exploration probability after max_frames frames
-            eps_evaluation: Float, Exploration probability during evaluation
-            eps_annealing_frames: Int, Number of frames over which the
-                exploration probabilty is annealed from eps_initial to eps_final
-            replay_memory_start_size: Integer, Number of frames during
-                which the agent only explores
-            max_frames: Integer, Total number of frames shown to the agent
+            n_actions (int): action space size
+            eps_initial/final/frame (float): exploration rates
+            eps_annealing_frames (int): frames over which to anneal eps
+            replay_memory_start_size (int): frames before learning
+            max_steps (int): total training frames
+            random_seed (int): for reproducible randomness
         """
         self.n_actions = n_actions
         self.eps_initial = eps_initial
@@ -127,16 +129,7 @@ class ActionGetter:
             self.intercept_2 = self.eps_final_frame - self.slope_2*self.max_steps
 
     def pt_get_action(self, step_number, state, active_head=None, evaluation=False):
-        """
-        Args:
-            step_number: int number of the current step
-            state: A (4, 84, 84) sequence of frames of an atari game in grayscale
-            active_head: number of head to use, if None, will run all heads and vote
-            evaluation: A boolean saying whether the agent is being evaluated
-        Returns:
-            An integer between 0 and n_actions
-        """
-
+        """Select action according to current epsilon; if multiple heads, vote among them"""
         if evaluation:
             eps = self.eps_evaluation
         elif step_number < self.replay_memory_start_size:
@@ -168,6 +161,7 @@ class ActionGetter:
                 return heads_chosen, action
 
 def ptlearn(states, actions, rewards, next_states, terminal_flags, active_heads, masks,step_number):
+    """Perform a learning step using a batch of experiences"""
     states = torch.Tensor(states.astype(np.float32)/info['NORM_BY']).to(info['DEVICE'])
     next_states = torch.Tensor(next_states.astype(np.float32)/info['NORM_BY']).to(info['DEVICE'])
     rewards = torch.Tensor(rewards).to(info['DEVICE'])
@@ -327,6 +321,7 @@ def train(step_number, last_save):
         matplotlib_plot_all(perf)
 
 def evaluate(step_number, highest_eval_score):
+    """Evaluate the current policy and return average reward, std, and highest score"""
     print("""
          #########################
          ####### Evaluation ######
@@ -377,6 +372,7 @@ def evaluate(step_number, highest_eval_score):
     return np.mean(eval_rewards), np.std(eval_rewards), highest_eval_score
 
 if __name__ == '__main__':
+    """Parse CLI args, setup device, info dict, environment, replay buffer, model, and start training."""
     from argparse import ArgumentParser
     parser = ArgumentParser()
     parser.add_argument('-c', '--cuda', action='store_true', default=False)
@@ -437,7 +433,7 @@ if __name__ == '__main__':
         "BETA_0": 0.08,          # initial β  (tune to taste)
         "TAU":    10_000_000,    # decay time‑constant in frames
     }
-    
+
     info['FAKE_ACTS'] = [info['RANDOM_HEAD'] for x in range(info['N_ENSEMBLE'])]
     info['args'] = args
     info['load_time'] = datetime.date.today().ctime()

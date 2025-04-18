@@ -1,3 +1,8 @@
+"""
+Environment wrapper using ALEInterface to interact with Atari ROMs.
+Handles frame preprocessing, grayscale conversion, stacking frame history,
+frame skipping, life-based termination, and reset/step functionality.
+"""
 import os
 from collections import deque
 import numpy as np
@@ -5,13 +10,15 @@ import ale_py
 from ale_py import ALEInterface
 import cv2
 
-# opencv is ~3x faster than skimage
+# Convert RGB frame to grayscale and resize to square output
 def cv_preprocess_frame(observ, output_size):
+    """Convert RGB to grayscale and resize via nearest neighbor interpolation"""
     gray = cv2.cvtColor(observ, cv2.COLOR_RGB2GRAY)
     output = cv2.resize(gray, (output_size, output_size), interpolation=cv2.INTER_NEAREST)
     return output
 
 class Environment(object):
+    """Main environment class interfacing with ALE (Atari Learning Environment)"""
     def __init__(self,
                  rom_file,
                  frame_skip=4,
@@ -22,6 +29,17 @@ class Environment(object):
                  dead_as_end=True,
                  max_episode_steps=18000,
                  autofire=False):
+        """
+        Args:
+            rom_file (str): path to Atari ROM file
+            frame_skip (int): repeat the same action this many frames
+            num_frames (int): number of history frames to stack for state
+            frame_size (int): size to resize frames (frame_size x frame_size)
+            no_op_start (int): random no-op actions at episode start
+            rand_seed (int): seed for reproducibility
+            dead_as_end (bool): treat life loss as terminal
+            max_episode_steps (int): cap on steps per episode
+        """
         self.max_episode_steps = max_episode_steps
         self.random_state = np.random.RandomState(rand_seed+15)
         self.ale = self._init_ale(rand_seed, rom_file)
@@ -43,6 +61,10 @@ class Environment(object):
 
     @staticmethod
     def _init_ale(rand_seed, rom_file):
+        """
+        Configure ALEInterface settings and load the ROM.
+        Returns an ALEInterface instance for game simulation.
+        """
         assert os.path.exists(rom_file), f'{rom_file} does not exist.'
         ale = ALEInterface()
 
@@ -58,9 +80,14 @@ class Environment(object):
 
     @property
     def num_actions(self):
+        """Number of discrete actions available in this Atari environment"""
         return len(self.actions)
 
     def _get_current_frame(self):
+        """
+        Preprocess current and previous screen frames to produce a single grayscale observation.
+        Applies max-pooling over RGB channels then resizing.
+        """
         # Get current screen
         screen = self.ale.getScreenRGB()
 
@@ -74,9 +101,17 @@ class Environment(object):
         return frame
 
     def close(self):
+        """Clean up ALE resources when done."""
         del(self.ale)
 
     def reset(self):
+        """
+        Reset the game environment:
+          - Clear frame queue and reward
+          - Run random no-op actions
+          - Populate initial stacked frames
+        Returns initial state as np.array of stacked frames.
+        """
         self.steps = 0
         self.end = False
         self.plot_frames = []
@@ -106,10 +141,16 @@ class Environment(object):
         return np.array(self.frame_queue)
 
     def step(self, action_idx):
-        """Perform action and return frame sequence and reward.
-        Return:
-        state: [frames] of length num_frames, 0 if fewer is available
-        reward: float
+        """
+        Execute action for frame_skip frames:
+          - Accumulate reward
+          - Detect life loss or game over
+          - Update frame queue and return new state
+        Returns:
+          state (np.array): stacked frames
+          reward (float): sum of rewards over skips
+          life_dead (bool): True if life lost or terminal
+          end (bool): True if episode ended
         """
         assert not self.end
         reward = 0
@@ -143,7 +184,7 @@ class Environment(object):
 
 
 if __name__ == '__main__':
-
+    # Quick performance test of environment stepping speed
     import time
     env = Environment('roms/breakout.bin', 4, 4, 84, 30, 33, True)
     print('starting with game over?', env.ale.game_over())
