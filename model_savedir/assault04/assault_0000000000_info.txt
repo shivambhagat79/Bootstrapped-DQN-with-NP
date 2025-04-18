@@ -35,13 +35,15 @@ CLIP_GRAD=5
 SEED=101
 RANDOM_HEAD=-1
 NETWORK_INPUT_SIZE=(84, 84)
-START_TIME=1744666599.0104709
+START_TIME=1744977432.6984286
 MAX_STEPS=10000
 MAX_EPISODE_STEPS=27000
 FRAME_SKIP=4
 MAX_NO_OP_FRAMES=30
 DEAD_AS_END=True
 IMPROVEMENT=['PRIOR', '']
+BETA_0=0.08
+TAU=10000000
 FAKE_ACTS=[-1, -1, -1, -1, -1, -1, -1, -1, -1]
-args=Namespace(cuda=True, model_loadpath='', buffer_loadpath='')
-load_time=Tue Apr 15 00:00:00 2025
+args=Namespace(cuda=False, model_loadpath='', buffer_loadpath='')
+load_time=Fri Apr 18 00:00:00 2025
