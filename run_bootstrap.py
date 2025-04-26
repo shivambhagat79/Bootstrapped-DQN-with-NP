@@ -24,6 +24,7 @@ from dqn_utils import seed_everything, write_info_file, generate_gif, save_check
 from env import Environment
 from replay import ReplayMemory
 import config
+import pandas as pd
 
 def rolling_average(a, n=5) :
     """Compute moving average over array `a` with window size `n`"""
@@ -317,6 +318,7 @@ def train(step_number, last_save):
                 print('last rewards', perf['episode_reward'][-info['PLOT_EVERY_EPISODES']:])
 
                 matplotlib_plot_all(perf)
+                save_perf_csv(perf, model_base_filedir)
         avg_eval_reward, avg_eval_stds, highest_eval_score = evaluate(step_number, highest_eval_score)
         perf['eval_rewards'].append(avg_eval_reward)
         perf['highest_eval_score'].append(highest_eval_score)
@@ -376,6 +378,12 @@ def evaluate(step_number, highest_eval_score):
         print(step_number, np.mean(eval_rewards), highest_eval_score, file=eval_reward_file)
     return np.mean(eval_rewards), np.std(eval_rewards), highest_eval_score
 
+def save_perf_csv(perf, base_dir):
+    """Save the performance dictionary to a CSV file in base_dir"""
+    df = pd.DataFrame({k: pd.Series(v) for k, v in perf.items()})
+    csv_path = os.path.join(base_dir, 'perf.csv')
+    df.to_csv(csv_path, index=False)
+
 if __name__ == '__main__':
     """Parse CLI args, setup device, info dict, environment, replay buffer, model, and start training."""
     from argparse import ArgumentParser
@@ -416,8 +424,8 @@ if __name__ == '__main__':
             "EPS_FINAL_FRAME":0.01, # INCREASED from 0.01 to 0.1
             "NUM_EVAL_EPISODES":5, # REDUCED from 5 to 2 for faster evaluation
             "BUFFER_SIZE":int(1e6), # REDUCED from 1e6 to 1e4 for faster training
-            "CHECKPOINT_EVERY_STEPS":10000000, # how often to write pkl of model and npz of data buffer
-            "EVAL_FREQUENCY":250000, # REDUCED from 250000 to 5000 for faster feedback
+            "CHECKPOINT_EVERY_STEPS":250000, # how often to write pkl of model and npz of data buffer
+            "EVAL_FREQUENCY":50000, # REDUCED from 250000 to 5000 for faster feedback
             "ADAM_LEARNING_RATE":6.25e-5, # INCREASED from 6.25e-5 to 6.25e-4 for faster learning
             "RMS_LEARNING_RATE": 0.00025, # according to paper = 0.00025
             "RMS_DECAY":0.95,
@@ -434,7 +442,7 @@ if __name__ == '__main__':
             "RANDOM_HEAD":-1, # just used in plotting as demarcation
             "NETWORK_INPUT_SIZE":(84,84),
             "START_TIME":time.time(),
-            "MAX_STEPS":int(50e6), # REDUCED from 50e6 to 1e4 for faster training completion
+            "MAX_STEPS":int(5e5), # REDUCED from 50e6 to 1e4 for faster training completion
             "MAX_EPISODE_STEPS":27000, # REDUCED from 27000 to 1000 for shorter episodes
             "FRAME_SKIP":4, # deterministic frame skips to match deepmind
             "MAX_NO_OP_FRAMES":30, # REDUCED from 30 to 10 for faster episode start
