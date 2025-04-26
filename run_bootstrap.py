@@ -5,6 +5,8 @@ Handles argument parsing, environment setup, model initialization, training loop
 from __future__ import print_function
 import math
 import matplotlib
+
+from rnd import RNDPredictor, RNDTarget
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import os
@@ -178,6 +180,14 @@ def ptlearn(states, actions, rewards, next_states, terminal_flags, active_heads,
     # min history to learn is 200,000 frames in dqn - 50000 steps
     losses = [0.0 for _ in range(info['N_ENSEMBLE'])]
 
+    t_feats = rnd_target(states)               # no_grad inside target net
+    p_feats = rnd_predictor(states)
+    aux_loss = F.mse_loss(p_feats, t_feats.detach())
+
+    rnd_optim.zero_grad()
+    aux_loss.backward()
+    rnd_optim.step()
+
     opt.zero_grad()
     q_policy_vals = policy_net(states, None)
     next_q_target_vals = target_net(next_states, None)
@@ -272,8 +282,21 @@ def train(step_number, last_save):
 
                 ep_eps_list.append(eps)
                 next_state, reward, life_lost, terminal = env.step(action)
-                # Store transition in the replay memory
 
+                state_tensor = torch.FloatTensor(next_state).unsqueeze(0).to(device)
+                state_tensor /= info['NORM_BY']
+
+                with torch.no_grad():
+                    t_feats = rnd_target(state_tensor)
+                p_feats = rnd_predictor(state_tensor)
+
+                intrinsic_reward = ((p_feats - t_feats)**2).mean(dim=1)
+                int_rew = intrinsic_reward.item()
+                reward=np.sign(reward)
+                total_rew = reward + ETA * int_rew
+                reward=total_rew
+
+                # Store transition in the replay memory
                 replay_memory.add_experience(action=action,
                                                 frame=next_state[-1],
                                                 reward=np.sign(reward),
@@ -541,6 +564,19 @@ if __name__ == '__main__':
 
         target_net.load_state_dict(policy_net.state_dict())
 
+        CONVFEAT = 32        # number of base convolutional filters
+        REP_SIZE = 512       # dimensionality of the RND embedding
+        ETA      = 0.01      # scale of intrinsic reward
+        RND_LR   = 1e-4      # learning rate for the predictor network
+
+        # Instantiate fixed target and trainable predictor
+        rnd_target    = RNDTarget(input_channels=4,
+                                convfeat=CONVFEAT,
+                                rep_size=REP_SIZE).to(device)
+        rnd_predictor = RNDPredictor(input_channels=4,
+                                    convfeat=CONVFEAT,
+                                    rep_size=REP_SIZE).to(device)
+
         # create optimizer
         # opt = optim.RMSprop(policy_net.parameters(),
         #                    lr=info["RMS_LEARNING_RATE"],
@@ -549,6 +585,7 @@ if __name__ == '__main__':
         #                    centered=info["RMS_CENTERED"],
         #                    alpha=info["RMS_DECAY"])
         opt = optim.Adam(policy_net.parameters(), lr=info['ADAM_LEARNING_RATE'])
+        rnd_optim     = torch.optim.Adam(rnd_predictor.parameters(), lr=RND_LR)
 
         kl_loss = nn.KLDivLoss()
         ce_loss = nn.CrossEntropyLoss()
@@ -570,4 +607,3 @@ if __name__ == '__main__':
 
         train(start_step_number, start_last_save)
 # end of games loop
-
