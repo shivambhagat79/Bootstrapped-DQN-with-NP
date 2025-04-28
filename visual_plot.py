@@ -66,6 +66,15 @@ if __name__ == '__main__':
     y2_mean_scores = perf2['eval_rewards']
     y2_std_scores = perf2['eval_stds']
     y2q = perf2['q_record']
+
+    y1_int_rew = perf1['int_rew']
+    y1_total_rew = perf1['total_rew']
+    y1_aux_loss = perf1['auxillary_loss']
+
+    y2_int_rew = perf2['int_rew']
+    y2_total_rew = perf2['total_rew']
+    y2_aux_loss = perf2['auxillary_loss']
+
     print(perf1['highest_eval_score'][-1], perf2['highest_eval_score'][-1])
 
     title = "Mean Evaluation Scores in "+ titile_name
@@ -97,6 +106,42 @@ if __name__ == '__main__':
         [y1q, y2q],
         "Steps",
         "Q values",
+        title,
+        legends,
+        loc="upper left"
+    )
+
+    # Add plot for Intrinsic Reward
+    title = "Intrinsic Reward in "+ titile_name
+    plots(
+        [steps1, steps2],
+        [y1_int_rew, y2_int_rew],
+        "Steps",
+        "Intrinsic Reward",
+        title,
+        legends,
+        loc="upper left"
+    )
+
+    # Add plot for Total Reward
+    title = "Total Reward in "+ titile_name
+    plots(
+        [steps1, steps2],
+        [y1_total_rew, y2_total_rew],
+        "Steps",
+        "Total Reward",
+        title,
+        legends,
+        loc="upper left"
+    )
+
+    # Add plot for Auxiliary Loss
+    title = "Auxiliary Loss in "+ titile_name
+    plots(
+        [steps1, steps2],
+        [y1_aux_loss, y2_aux_loss],
+        "Steps",
+        "Auxiliary Loss",
         title,
         legends,
         loc="upper left"

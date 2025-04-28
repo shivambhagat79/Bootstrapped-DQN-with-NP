@@ -81,6 +81,16 @@ def matplotlib_plot_all(p):
     plot_dict_losses({'eval rewards':{'index':np.array(p['eval_steps'])[eval_steps_mask], 'val':np.array(p['eval_rewards'])[eval_rewards_mask]}}, name=os.path.join(model_base_filedir, 'eval_rewards_steps.png'), rolling_length=0)
     plot_dict_losses({'highest eval score':{'index':np.array(p['eval_steps'])[eval_steps_mask], 'val':np.array(p['highest_eval_score'])[eval_score_mask]}}, name=os.path.join(model_base_filedir, 'highest_eval_score.png'), rolling_length=0)
 
+    # Add plots for new metrics
+    int_rew_mask = np.isfinite(p['int_rew'])
+    plot_dict_losses({'intrinsic reward':{'index':np.array(steps)[int_rew_mask], 'val':np.array(p['int_rew'])[int_rew_mask]}}, name=os.path.join(model_base_filedir, 'steps_intrinsic_reward.png'))
+
+    total_rew_mask = np.isfinite(p['total_rew'])
+    plot_dict_losses({'total reward':{'index':np.array(steps)[total_rew_mask], 'val':np.array(p['total_rew'])[total_rew_mask]}}, name=os.path.join(model_base_filedir, 'steps_total_reward.png'))
+
+    aux_loss_mask = np.isfinite(p['auxillary_loss'])
+    plot_dict_losses({'auxiliary loss':{'index':np.array(steps)[aux_loss_mask], 'val':np.array(p['auxillary_loss'])[aux_loss_mask]}}, name=os.path.join(model_base_filedir, 'steps_auxiliary_loss.png'))
+
 def handle_checkpoint(last_save, cnt):
     """Save model checkpoint every CHECKPOINT_EVERY_STEPS and update last_save timestamp"""
     if (cnt-last_save) >= info['CHECKPOINT_EVERY_STEPS']:
@@ -183,9 +193,10 @@ def ptlearn(states, actions, rewards, next_states, terminal_flags, active_heads,
     t_feats = rnd_target(states)               # no_grad inside target net
     p_feats = rnd_predictor(states)
     aux_loss = F.mse_loss(p_feats, t_feats.detach())
+    # perf['auxillary_loss'].append(aux_loss.cpu().detach().item())
 
     rnd_optim.zero_grad()
-    aux_loss.backward()
+    aux_loss.backward(retain_graph=True) # Retain graph if policy loss backward needs it
     rnd_optim.step()
 
     opt.zero_grad()
@@ -242,7 +253,7 @@ def ptlearn(states, actions, rewards, next_states, terminal_flags, active_heads,
 
     opt.step()
 
-    return q_record.cpu(), np.mean(losses)
+    return q_record.cpu(), np.mean(losses), aux_loss.cpu().detach().item() # Return aux_loss
 
 def train(step_number, last_save):
     """Contains the training and evaluation loops"""
@@ -271,6 +282,7 @@ def train(step_number, last_save):
             ptloss_list = []
             q_list = []
             action_list = []
+            aux_loss_list = [] # Add list to store aux losses for the episode
             while not terminal:
                 if life_lost:
                     action = 1
@@ -311,9 +323,10 @@ def train(step_number, last_save):
 
                 if step_number % info['LEARN_EVERY_STEPS'] == 0 and step_number > info['MIN_HISTORY_TO_LEARN']:
                     _states, _actions, _rewards, _next_states, _terminal_flags, _active_heads, _masks = replay_memory.get_minibatch(info['BATCH_SIZE'])
-                    q_record, ptloss = ptlearn(_states, _actions, _rewards, _next_states, _terminal_flags, _active_heads, _masks, step_number)
+                    q_record, ptloss, aux_loss = ptlearn(_states, _actions, _rewards, _next_states, _terminal_flags, _active_heads, _masks, step_number)
                     ptloss_list.append(ptloss)
                     q_list.append(q_record)
+                    aux_loss_list.append(aux_loss) # Append the returned aux_loss
 
                 if step_number % info['TARGET_UPDATE'] == 0 and step_number >  info['MIN_HISTORY_TO_LEARN']:
                     print("++++++++++++++++++++++++++++++++++++++++++++++++")
@@ -323,11 +336,12 @@ def train(step_number, last_save):
             et = time.time()
             ep_time = et-st
             epoch_frame_episode_last = epoch_frame_episode
-            
+
 
 # record the two reward streams
             perf["int_rew"].append(int_rew)
             perf["total_rew"].append(total_rew)
+            perf["auxillary_loss"].append(np.mean(aux_loss_list) if aux_loss_list else np.nan) # Append mean aux_loss for the episode
 
             perf['steps'].append(step_number)
             perf['episode_step'].append(step_number-start_steps)
@@ -440,21 +454,21 @@ if __name__ == '__main__':
             "DOUBLE_DQN":True, # use double dqn
             "PRIOR":True, # turn on to use randomized prior
             "PRIOR_SCALE":1, # what to scale prior by
-            "N_ENSEMBLE":3, # REDUCED from 9 to 3 for faster training
+            "N_ENSEMBLE":9, # REDUCED from 9 to 3 for faster training
             "LEARN_EVERY_STEPS":4, # updates every 4 steps in osband
             "BERNOULLI_PROBABILITY": 0.9, # Probability of experience to go to each head - if 1, every experience goes to every head
-            "TARGET_UPDATE":1000, # REDUCED from 10000 to 1000 for faster training
-            "MIN_HISTORY_TO_LEARN":1000, # REDUCED from 50000 to 1000 for faster training
+            "TARGET_UPDATE":10000, # REDUCED from 10000 to 1000 for faster training
+            "MIN_HISTORY_TO_LEARN":50000, # REDUCED from 50000 to 1000 for faster training
             "NORM_BY":255.,  # divide the float(of uint) by this number to normalize - max val of data is 255
             "EPS_INITIAL":1.0, # should be 1
-            "EPS_FINAL":0.1, # INCREASED from 0.01 to 0.1 for faster exploration
+            "EPS_FINAL":0.01, # INCREASED from 0.01 to 0.1 for faster exploration
             "EPS_EVAL":0.0, # 0 in osband, .05 in others....
-            "EPS_ANNEALING_FRAMES":int(1e4), # REDUCED from 1e6 to 1e4 for faster training
-            "EPS_FINAL_FRAME":0.1, # INCREASED from 0.01 to 0.1
-            "NUM_EVAL_EPISODES":2, # REDUCED from 5 to 2 for faster evaluation
-            "BUFFER_SIZE":int(1e4), # REDUCED from 1e6 to 1e4 for faster training
+            "EPS_ANNEALING_FRAMES":int(1e5), # REDUCED from 1e6 to 1e4 for faster training
+            "EPS_FINAL_FRAME":0.01, # INCREASED from 0.01 to 0.1
+            "NUM_EVAL_EPISODES":5, # REDUCED from 5 to 2 for faster evaluation
+            "BUFFER_SIZE":int(5e3), # REDUCED from 1e6 to 1e4 for faster training
             "CHECKPOINT_EVERY_STEPS":250000, # how often to write pkl of model and npz of data buffer
-            "EVAL_FREQUENCY":5000, # REDUCED from 250000 to 5000 for faster feedback
+            "EVAL_FREQUENCY":50000, # REDUCED from 250000 to 5000 for faster feedback
             "ADAM_LEARNING_RATE":6.25e-4, # INCREASED from 6.25e-5 to 6.25e-4 for faster learning
             "RMS_LEARNING_RATE": 0.00025, # according to paper = 0.00025
             "RMS_DECAY":0.95,
@@ -465,16 +479,16 @@ if __name__ == '__main__':
             "N_EPOCHS":90000,  # Number of episodes to run
             "BATCH_SIZE":32, # Batch size to use for learning
             "GAMMA":.99, # Gamma weight in Q update
-            "PLOT_EVERY_EPISODES": 5, # REDUCED from 50 to 5 for more frequent plotting
+            "PLOT_EVERY_EPISODES": 50, # REDUCED from 50 to 5 for more frequent plotting
             "CLIP_GRAD":5, # Gradient clipping setting
             "SEED":101,
             "RANDOM_HEAD":-1, # just used in plotting as demarcation
             "NETWORK_INPUT_SIZE":(84,84),
             "START_TIME":time.time(),
-            "MAX_STEPS":int(1e4), # REDUCED from 50e6 to 1e4 for faster training completion
-            "MAX_EPISODE_STEPS":1000, # REDUCED from 27000 to 1000 for shorter episodes
+            "MAX_STEPS":int(5e5), # REDUCED from 50e6 to 1e4 for faster training completion
+            "MAX_EPISODE_STEPS":27000, # REDUCED from 27000 to 1000 for shorter episodes
             "FRAME_SKIP":4, # deterministic frame skips to match deepmind
-            "MAX_NO_OP_FRAMES":10, # REDUCED from 30 to 10 for faster episode start
+            "MAX_NO_OP_FRAMES":30, # REDUCED from 30 to 10 for faster episode start
             "DEAD_AS_END":True, # do you send finished=true to agent while training when it loses a life
             "IMPROVEMENT": ['PRIOR', ''],
             "BETA_0": 0.08,          # initial β  (tune to taste)
@@ -540,7 +554,8 @@ if __name__ == '__main__':
                     'eval_stds':[],
                     'eval_steps':[],
                     'int_rew':[],
-                    'total_rew':[]}
+                    'total_rew':[],
+                    'auxillary_loss':[]}
 
             start_step_number = 0
             start_last_save = 0
@@ -574,8 +589,8 @@ if __name__ == '__main__':
 
         CONVFEAT = 32        # number of base convolutional filters
         REP_SIZE = 512       # dimensionality of the RND embedding
-        ETA      = 0.01      # scale of intrinsic reward
-        RND_LR   = 1e-4      # learning rate for the predictor network
+        ETA      = 0.1      # scale of intrinsic reward
+        RND_LR   = 1e-9      # learning rate for the predictor network
 
         # Instantiate fixed target and trainable predictor
         rnd_target    = RNDTarget(input_channels=4,
