@@ -323,6 +323,11 @@ def train(step_number, last_save):
             et = time.time()
             ep_time = et-st
             epoch_frame_episode_last = epoch_frame_episode
+            
+
+# record the two reward streams
+            perf["int_rew"].append(int_rew)
+            perf["total_rew"].append(total_rew)
 
             perf['steps'].append(step_number)
             perf['episode_step'].append(step_number-start_steps)
@@ -533,7 +538,9 @@ if __name__ == '__main__':
                     'eval_rewards':[],
                     'highest_eval_score':[],
                     'eval_stds':[],
-                    'eval_steps':[]}
+                    'eval_steps':[],
+                    'int_rew':[],
+                    'total_rew':[]}
 
             start_step_number = 0
             start_last_save = 0
