@@ -28,6 +28,11 @@ from replay import ReplayMemory
 import config
 import pandas as pd
 
+# placeholders for per-head RND networks and optimizers, set in __main__
+rnd_target_list = None
+rnd_predictor_list = None
+rnd_optim_list = None
+
 def rolling_average(a, n=5) :
     """Compute moving average over array `a` with window size `n`"""
     if n == 0:
@@ -190,14 +195,17 @@ def ptlearn(states, actions, rewards, next_states, terminal_flags, active_heads,
     # min history to learn is 200,000 frames in dqn - 50000 steps
     losses = [0.0 for _ in range(info['N_ENSEMBLE'])]
 
-    t_feats = rnd_target(states)               # no_grad inside target net
-    p_feats = rnd_predictor(states)
-    aux_loss = F.mse_loss(p_feats, t_feats.detach())
-    # perf['auxillary_loss'].append(aux_loss.cpu().detach().item())
-
-    rnd_optim.zero_grad()
-    aux_loss.backward(retain_graph=True) # Retain graph if policy loss backward needs it
-    rnd_optim.step()
+    # compute and optimize auxiliary RND losses for each head
+    aux_losses = []
+    for k in range(info['N_ENSEMBLE']):
+        t_feats_k = rnd_target_list[k](states)
+        p_feats_k = rnd_predictor_list[k](states)
+        loss_k = F.mse_loss(p_feats_k, t_feats_k.detach())
+        rnd_optim_list[k].zero_grad()
+        loss_k.backward()
+        rnd_optim_list[k].step()
+        aux_losses.append(loss_k)
+    aux_loss = torch.stack(aux_losses).mean()
 
     opt.zero_grad()
     q_policy_vals = policy_net(states, None)
@@ -298,22 +306,22 @@ def train(step_number, last_save):
                 state_tensor = torch.FloatTensor(next_state).unsqueeze(0).to(device)
                 state_tensor /= info['NORM_BY']
 
+                # compute intrinsic reward using the active head's RND networks
                 with torch.no_grad():
-                    t_feats = rnd_target(state_tensor)
-                p_feats = rnd_predictor(state_tensor)
-
+                    t_feats = rnd_target_list[active_head](state_tensor)
+                p_feats = rnd_predictor_list[active_head](state_tensor)
                 intrinsic_reward = ((p_feats - t_feats)**2).mean(dim=1)
                 int_rew = intrinsic_reward.item()
-                reward=np.sign(reward)
+                reward = np.sign(reward)
                 total_rew = reward + ETA * int_rew
-                reward=total_rew
+                reward = total_rew
 
                 # Store transition in the replay memory
                 replay_memory.add_experience(action=action,
-                                                frame=next_state[-1],
-                                                reward=np.sign(reward),
-                                                terminal=life_lost,
-                                                active_head= active_head)
+                                             frame=next_state[-1],
+                                             reward=reward,
+                                             terminal=life_lost,
+                                             active_head=active_head)
 
                 step_number += 1
                 epoch_frame += 1
@@ -590,30 +598,28 @@ if __name__ == '__main__':
         CONVFEAT = 32        # number of base convolutional filters
         REP_SIZE = 512       # dimensionality of the RND embedding
         ETA      = 0.1      # scale of intrinsic reward
-        RND_LR   = 1e-9      # learning rate for the predictor network
+        RND_LR   = 1e-7      # learning rate for the predictor network
 
-        # Instantiate fixed target and trainable predictor
-        rnd_target    = RNDTarget(input_channels=4,
-                                convfeat=CONVFEAT,
-                                rep_size=REP_SIZE).to(device)
-        rnd_predictor = RNDPredictor(input_channels=4,
-                                    convfeat=CONVFEAT,
-                                    rep_size=REP_SIZE).to(device)
+        # Instantiate fixed target and trainable predictor for each head
+        from torch import nn as _nn, optim as _optim
+        rnd_target_list = _nn.ModuleList([
+            RNDTarget(input_channels=info['HISTORY_SIZE'], convfeat=CONVFEAT, rep_size=REP_SIZE).to(device)
+            for _ in range(info['N_ENSEMBLE'])
+        ])
+        rnd_predictor_list = _nn.ModuleList([
+            RNDPredictor(input_channels=info['HISTORY_SIZE'], convfeat=CONVFEAT, rep_size=REP_SIZE).to(device)
+            for _ in range(info['N_ENSEMBLE'])
+        ])
+        # create optimizers for each predictor network
+        rnd_optim_list = [_optim.Adam(rnd_predictor_list[k].parameters(), lr=RND_LR) for k in range(info['N_ENSEMBLE'])]
 
         # create optimizer
-        # opt = optim.RMSprop(policy_net.parameters(),
-        #                    lr=info["RMS_LEARNING_RATE"],
-        #                    momentum=info["RMS_MOMENTUM"],
-        #                    eps=info["RMS_EPSILON"],
-        #                    centered=info["RMS_CENTERED"],
-        #                    alpha=info["RMS_DECAY"])
         opt = optim.Adam(policy_net.parameters(), lr=info['ADAM_LEARNING_RATE'])
-        rnd_optim     = torch.optim.Adam(rnd_predictor.parameters(), lr=RND_LR)
 
         kl_loss = nn.KLDivLoss()
         ce_loss = nn.CrossEntropyLoss()
         #eval_states = []
-        if args.model_loadpath is not '':
+        if args.model_loadpath != '':
             # what about random states - they will be wrong now???
             target_net.load_state_dict(model_dict['target_net_state_dict'])
             policy_net.load_state_dict(model_dict['policy_net_state_dict'])
