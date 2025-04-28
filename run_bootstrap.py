@@ -422,6 +422,7 @@ if __name__ == '__main__':
     print("running on %s"%device)
 
     games = ['assault','breakout','freeway','space_invaders','tennis']
+    # games = ['montezuma_revenge']
     for game in games:
         print(f"Starting training for game: {game}")
         args.model_loadpath = ''
@@ -434,22 +435,22 @@ if __name__ == '__main__':
             "DOUBLE_DQN":True, # use double dqn
             "PRIOR":True, # turn on to use randomized prior
             "PRIOR_SCALE":1, # what to scale prior by
-            "N_ENSEMBLE":9, # REDUCED from 9 to 3 for faster training
+            "N_ENSEMBLE":3, # REDUCED from 9 to 3 for faster training
             "LEARN_EVERY_STEPS":4, # updates every 4 steps in osband
             "BERNOULLI_PROBABILITY": 0.9, # Probability of experience to go to each head - if 1, every experience goes to every head
-            "TARGET_UPDATE":10000, # REDUCED from 10000 to 1000 for faster training
-            "MIN_HISTORY_TO_LEARN":50000, # REDUCED from 50000 to 1000 for faster training
+            "TARGET_UPDATE":1000, # REDUCED from 10000 to 1000 for faster training
+            "MIN_HISTORY_TO_LEARN":1000, # REDUCED from 50000 to 1000 for faster training
             "NORM_BY":255.,  # divide the float(of uint) by this number to normalize - max val of data is 255
             "EPS_INITIAL":1.0, # should be 1
-            "EPS_FINAL":0.01, # INCREASED from 0.01 to 0.1 for faster exploration
+            "EPS_FINAL":0.1, # INCREASED from 0.01 to 0.1 for faster exploration
             "EPS_EVAL":0.0, # 0 in osband, .05 in others....
-            "EPS_ANNEALING_FRAMES":int(1e6), # REDUCED from 1e6 to 1e4 for faster training
-            "EPS_FINAL_FRAME":0.01, # INCREASED from 0.01 to 0.1
-            "NUM_EVAL_EPISODES":5, # REDUCED from 5 to 2 for faster evaluation
-            "BUFFER_SIZE":int(1e6), # REDUCED from 1e6 to 1e4 for faster training
+            "EPS_ANNEALING_FRAMES":int(1e4), # REDUCED from 1e6 to 1e4 for faster training
+            "EPS_FINAL_FRAME":0.1, # INCREASED from 0.01 to 0.1
+            "NUM_EVAL_EPISODES":2, # REDUCED from 5 to 2 for faster evaluation
+            "BUFFER_SIZE":int(1e4), # REDUCED from 1e6 to 1e4 for faster training
             "CHECKPOINT_EVERY_STEPS":250000, # how often to write pkl of model and npz of data buffer
-            "EVAL_FREQUENCY":50000, # REDUCED from 250000 to 5000 for faster feedback
-            "ADAM_LEARNING_RATE":6.25e-5, # INCREASED from 6.25e-5 to 6.25e-4 for faster learning
+            "EVAL_FREQUENCY":5000, # REDUCED from 250000 to 5000 for faster feedback
+            "ADAM_LEARNING_RATE":6.25e-4, # INCREASED from 6.25e-5 to 6.25e-4 for faster learning
             "RMS_LEARNING_RATE": 0.00025, # according to paper = 0.00025
             "RMS_DECAY":0.95,
             "RMS_MOMENTUM":0.0,
@@ -459,16 +460,16 @@ if __name__ == '__main__':
             "N_EPOCHS":90000,  # Number of episodes to run
             "BATCH_SIZE":32, # Batch size to use for learning
             "GAMMA":.99, # Gamma weight in Q update
-            "PLOT_EVERY_EPISODES": 50, # REDUCED from 50 to 5 for more frequent plotting
+            "PLOT_EVERY_EPISODES": 5, # REDUCED from 50 to 5 for more frequent plotting
             "CLIP_GRAD":5, # Gradient clipping setting
             "SEED":101,
             "RANDOM_HEAD":-1, # just used in plotting as demarcation
             "NETWORK_INPUT_SIZE":(84,84),
             "START_TIME":time.time(),
-            "MAX_STEPS":int(5e5), # REDUCED from 50e6 to 1e4 for faster training completion
-            "MAX_EPISODE_STEPS":27000, # REDUCED from 27000 to 1000 for shorter episodes
+            "MAX_STEPS":int(1e4), # REDUCED from 50e6 to 1e4 for faster training completion
+            "MAX_EPISODE_STEPS":1000, # REDUCED from 27000 to 1000 for shorter episodes
             "FRAME_SKIP":4, # deterministic frame skips to match deepmind
-            "MAX_NO_OP_FRAMES":30, # REDUCED from 30 to 10 for faster episode start
+            "MAX_NO_OP_FRAMES":10, # REDUCED from 30 to 10 for faster episode start
             "DEAD_AS_END":True, # do you send finished=true to agent while training when it loses a life
             "IMPROVEMENT": ['PRIOR', ''],
             "BETA_0": 0.08,          # initial β  (tune to taste)
