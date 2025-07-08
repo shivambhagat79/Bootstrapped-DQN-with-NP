@@ -448,7 +448,10 @@ if __name__ == '__main__':
         device = 'cpu'
     print("running on %s"%device)
 
-    games = ['assault','breakout','freeway','space_invaders','tennis']
+    games = [
+        'assault', 'breakout', 'freeway', 'space_invaders', 'tennis',
+        'amidar', 'pong', 'ms_pacman', 'bowling', 'boxing'
+    ]
     # games = ['montezuma_revenge']
     for game in games:
         print(f"Starting training for game: {game}")
@@ -476,7 +479,7 @@ if __name__ == '__main__':
             "NUM_EVAL_EPISODES":5, # REDUCED from 5 to 2 for faster evaluation
             "BUFFER_SIZE":int(5e3), # REDUCED from 1e6 to 1e4 for faster training
             "CHECKPOINT_EVERY_STEPS":250000, # how often to write pkl of model and npz of data buffer
-            "EVAL_FREQUENCY":50000, # REDUCED from 250000 to 5000 for faster feedback
+            "EVAL_FREQUENCY":250000, # REDUCED from 250000 to 5000 for faster feedback
             "ADAM_LEARNING_RATE":6.25e-4, # INCREASED from 6.25e-5 to 6.25e-4 for faster learning
             "RMS_LEARNING_RATE": 0.00025, # according to paper = 0.00025
             "RMS_DECAY":0.95,
@@ -493,7 +496,7 @@ if __name__ == '__main__':
             "RANDOM_HEAD":-1, # just used in plotting as demarcation
             "NETWORK_INPUT_SIZE":(84,84),
             "START_TIME":time.time(),
-            "MAX_STEPS":int(5e5), # REDUCED from 50e6 to 1e4 for faster training completion
+            "MAX_STEPS":int(5e6), # Increased from 500,000 to 3,000,000 for longer training
             "MAX_EPISODE_STEPS":27000, # REDUCED from 27000 to 1000 for shorter episodes
             "FRAME_SKIP":4, # deterministic frame skips to match deepmind
             "MAX_NO_OP_FRAMES":30, # REDUCED from 30 to 10 for faster episode start
