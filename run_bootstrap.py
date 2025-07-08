@@ -496,7 +496,7 @@ if __name__ == '__main__':
             "RANDOM_HEAD":-1, # just used in plotting as demarcation
             "NETWORK_INPUT_SIZE":(84,84),
             "START_TIME":time.time(),
-            "MAX_STEPS":int(5e6), # Increased from 500,000 to 3,000,000 for longer training
+            "MAX_STEPS":int(5e7), # Increased from 500,000 to 3,000,000 for longer training
             "MAX_EPISODE_STEPS":27000, # REDUCED from 27000 to 1000 for shorter episodes
             "FRAME_SKIP":4, # deterministic frame skips to match deepmind
             "MAX_NO_OP_FRAMES":30, # REDUCED from 30 to 10 for faster episode start
